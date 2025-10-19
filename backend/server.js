@@ -30,17 +30,20 @@ const CONSUMET_URL = process.env.CONSUMET_API_URL || 'https://api.consumet.org';
 const MANGADEX_URL = 'https://api.mangadex.org';
 
 // Helper function to handle API requests with retry
-const fetchAPI = async (url, options = {}, retries = 2) => {
+const fetchAPI = async (url, options = {}, retries = 3) => {
   for (let i = 0; i < retries; i++) {
     try {
+      console.log(`Fetching: ${url}`);
       const response = await axios.get(url, {
-        timeout: 20000,
+        timeout: 30000, // Increased to 30 seconds
         ...options
       });
+      console.log(`Success: ${url}`);
       return response.data;
     } catch (error) {
+      console.error(`Attempt ${i + 1} failed for ${url}: ${error.message}`);
       if (i === retries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s between retries
     }
   }
 };
@@ -97,16 +100,19 @@ app.get('/api/manga/recent', async (req, res) => {
       const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
       const coverFileName = coverArt?.attributes?.fileName;
       
+      // Construct full backend URL for cover proxy
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
       return {
         id: manga.id,
         title: getEnglishTitle(manga.attributes.title),
         description: manga.attributes.description?.en || 'No description available',
         image: coverFileName 
-          ? `/api/manga/cover/${manga.id}/${coverFileName}`
-          : null,
+          ? `${baseUrl}/api/manga/cover/${manga.id}/${coverFileName}`
+          : 'https://placehold.co/300x450/1f2937/6b7280?text=No+Cover',
         coverImage: coverFileName 
-          ? `/api/manga/cover/${manga.id}/${coverFileName}`
-          : null,
+          ? `${baseUrl}/api/manga/cover/${manga.id}/${coverFileName}`
+          : 'https://placehold.co/300x450/1f2937/6b7280?text=No+Cover',
         status: manga.attributes.status,
         year: manga.attributes.year,
         rating: manga.attributes.contentRating,
@@ -145,16 +151,19 @@ app.get('/api/manga/search', async (req, res) => {
       const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
       const coverFileName = coverArt?.attributes?.fileName;
       
+      // Construct full backend URL for cover proxy
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
       return {
         id: manga.id,
         title: getEnglishTitle(manga.attributes.title),
         description: manga.attributes.description?.en || 'No description available',
         image: coverFileName 
-          ? `/api/manga/cover/${manga.id}/${coverFileName}`
-          : null,
+          ? `${baseUrl}/api/manga/cover/${manga.id}/${coverFileName}`
+          : 'https://placehold.co/300x450/1f2937/6b7280?text=No+Cover',
         coverImage: coverFileName 
-          ? `/api/manga/cover/${manga.id}/${coverFileName}`
-          : null,
+          ? `${baseUrl}/api/manga/cover/${manga.id}/${coverFileName}`
+          : 'https://placehold.co/300x450/1f2937/6b7280?text=No+Cover',
         status: manga.attributes.status,
         year: manga.attributes.year,
         rating: manga.attributes.contentRating
@@ -182,14 +191,17 @@ app.get('/api/manga/:id/info', async (req, res) => {
     const manga = data.data;
     const coverArt = manga.relationships.find(rel => rel.type === 'cover_art');
     const coverFileName = coverArt?.attributes?.fileName;
+    
+    // Construct full backend URL for cover proxy
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
 
     res.json({
       id: manga.id,
       title: getEnglishTitle(manga.attributes.title),
       description: manga.attributes.description?.en || 'No description available',
       image: coverFileName 
-        ? `/api/manga/cover/${manga.id}/${coverFileName}`
-        : null,
+        ? `${baseUrl}/api/manga/cover/${manga.id}/${coverFileName}`
+        : 'https://placehold.co/300x450/1f2937/6b7280?text=No+Cover',
       status: manga.attributes.status,
       year: manga.attributes.year,
       tags: manga.attributes.tags?.map(tag => tag.attributes.name.en) || []
@@ -309,29 +321,31 @@ app.get('/api/anime/search', async (req, res) => {
       return res.status(400).json({ error: 'Search query is required' });
     }
 
-    let data;
+    let data = null;
     const providers = ['gogoanime', 'zoro'];
     
     for (const provider of providers) {
       try {
         data = await fetchAPI(`${CONSUMET_URL}/anime/${provider}/${encodeURIComponent(q)}`);
-        if (data?.results?.length > 0) break;
+        if (data?.results && Array.isArray(data.results) && data.results.length > 0) {
+          break;
+        }
       } catch (err) {
         console.log(`${provider} search failed, trying next...`);
       }
     }
 
-    if (!data?.results) {
+    if (!data || !data.results || !Array.isArray(data.results)) {
       return res.json({ results: [] });
     }
 
     const results = data.results.map(anime => ({
-      id: anime.id,
-      title: anime.title,
-      image: anime.image,
-      releaseDate: anime.releaseDate,
-      subOrDub: anime.subOrDub,
-      status: anime.status
+      id: anime.id || '',
+      title: anime.title || 'Unknown Title',
+      image: anime.image || 'https://placehold.co/300x450/1f2937/6b7280?text=No+Image',
+      releaseDate: anime.releaseDate || '',
+      subOrDub: anime.subOrDub || 'sub',
+      status: anime.status || 'Unknown'
     }));
 
     res.json({ results });
@@ -410,28 +424,33 @@ app.get('/api/movie/recent', async (req, res) => {
   try {
     const { page = 1 } = req.query;
     
-    let data;
+    let data = null;
     try {
       data = await fetchAPI(`${CONSUMET_URL}/movies/flixhq/trending`, {
         params: { page }
       });
     } catch (err) {
       // Fallback to popular
-      data = await fetchAPI(`${CONSUMET_URL}/movies/flixhq/popular`, {
-        params: { page }
-      });
+      try {
+        data = await fetchAPI(`${CONSUMET_URL}/movies/flixhq/popular`, {
+          params: { page }
+        });
+      } catch (err2) {
+        console.log('Both trending and popular failed');
+      }
     }
 
-    if (!data?.results) {
+    if (!data || !data.results || !Array.isArray(data.results)) {
+      console.log('No movie results found');
       return res.json({ results: [] });
     }
 
     const results = data.results.map(movie => ({
-      id: movie.id,
-      title: movie.title,
-      image: movie.image,
-      releaseDate: movie.releaseDate,
-      type: movie.type
+      id: movie.id || '',
+      title: movie.title || 'Unknown Title',
+      image: movie.image || 'https://placehold.co/300x450/1f2937/6b7280?text=No+Image',
+      releaseDate: movie.releaseDate || '',
+      type: movie.type || 'Movie'
     }));
 
     res.json({ results });
@@ -454,12 +473,16 @@ app.get('/api/movie/search', async (req, res) => {
       params: { page }
     });
 
+    if (!data || !data.results || !Array.isArray(data.results)) {
+      return res.json({ results: [] });
+    }
+
     const results = data.results.map(movie => ({
-      id: movie.id,
-      title: movie.title,
-      image: movie.image,
-      releaseDate: movie.releaseDate,
-      type: movie.type
+      id: movie.id || '',
+      title: movie.title || 'Unknown Title',
+      image: movie.image || 'https://placehold.co/300x450/1f2937/6b7280?text=No+Image',
+      releaseDate: movie.releaseDate || '',
+      type: movie.type || 'Movie'
     }));
 
     res.json({ results });
@@ -518,6 +541,45 @@ app.get('/api/movie/watch/:episodeId', async (req, res) => {
 // ============= HEALTH CHECK =============
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Test Consumet API connection
+app.get('/api/test/consumet', async (req, res) => {
+  const tests = {
+    anime_gogoanime: false,
+    anime_zoro: false,
+    movie_flixhq: false
+  };
+
+  // Test GogoAnime
+  try {
+    const data = await fetchAPI(`${CONSUMET_URL}/anime/gogoanime/recent-episodes?page=1`, {}, 1);
+    tests.anime_gogoanime = !!data?.results?.length;
+  } catch (e) {
+    console.error('GogoAnime test failed:', e.message);
+  }
+
+  // Test Zoro
+  try {
+    const data = await fetchAPI(`${CONSUMET_URL}/anime/zoro/recent-episodes?page=1`, {}, 1);
+    tests.anime_zoro = !!data?.results?.length;
+  } catch (e) {
+    console.error('Zoro test failed:', e.message);
+  }
+
+  // Test FlixHQ
+  try {
+    const data = await fetchAPI(`${CONSUMET_URL}/movies/flixhq/trending?page=1`, {}, 1);
+    tests.movie_flixhq = !!data?.results?.length;
+  } catch (e) {
+    console.error('FlixHQ test failed:', e.message);
+  }
+
+  res.json({
+    consumet_url: CONSUMET_URL,
+    tests,
+    working: Object.values(tests).some(v => v)
+  });
 });
 
 // Root route
