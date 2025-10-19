@@ -41,12 +41,12 @@ const MediaCard = ({ item, type, onClick }) => {
   const [imgError, setImgError] = useState(false);
   
   const getImage = () => {
-    if (imgError) return 'https://via.placeholder.com/300x450?text=No+Image';
+    if (imgError) return 'https://placehold.co/300x450/1f2937/6b7280?text=No+Image';
     if (type === 'manga') {
       // Use the backend proxy URL
-      return item.image || item.coverImage || 'https://via.placeholder.com/300x450?text=No+Cover';
+      return item.image || item.coverImage || 'https://placehold.co/300x450/1f2937/6b7280?text=No+Cover';
     }
-    return item.image || item.cover || 'https://via.placeholder.com/300x450?text=No+Image';
+    return item.image || item.cover || 'https://placehold.co/300x450/1f2937/6b7280?text=No+Image';
   };
 
   return (

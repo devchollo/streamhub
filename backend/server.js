@@ -263,7 +263,7 @@ app.get('/api/anime/recent', async (req, res) => {
   try {
     const { page = 1 } = req.query;
     
-    let data;
+    let data = null;
     const providers = ['gogoanime', 'zoro'];
     
     for (const provider of providers) {
@@ -271,22 +271,26 @@ app.get('/api/anime/recent', async (req, res) => {
         data = await fetchAPI(`${CONSUMET_URL}/anime/${provider}/recent-episodes`, {
           params: { page }
         });
-        if (data?.results?.length > 0) break;
+        if (data?.results && Array.isArray(data.results) && data.results.length > 0) {
+          break;
+        }
       } catch (err) {
         console.log(`${provider} failed, trying next...`);
       }
     }
 
-    if (!data?.results) {
+    // Safely handle response
+    if (!data || !data.results || !Array.isArray(data.results)) {
+      console.log('No anime results found from any provider');
       return res.json({ results: [] });
     }
 
     const results = data.results.map(anime => ({
-      id: anime.id,
-      title: anime.title,
-      image: anime.image,
-      episodeNumber: anime.episodeNumber,
-      url: anime.url
+      id: anime.id || '',
+      title: anime.title || 'Unknown Title',
+      image: anime.image || 'https://placehold.co/300x450/1f2937/6b7280?text=No+Image',
+      episodeNumber: anime.episodeNumber || anime.episode || 1,
+      url: anime.url || ''
     }));
 
     res.json({ results });
