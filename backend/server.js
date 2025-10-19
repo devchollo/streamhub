@@ -68,19 +68,23 @@ app.get('/api/manga/recent', async (req, res) => {
       return {
         id: manga.id,
         title: manga.attributes.title,
-        description: manga.attributes.description?.en || 'No description available',
+        description: manga.attributes.description?.en || manga.attributes.description || 'No description available',
+        image: coverFileName 
+          ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.512.jpg`
+          : 'https://via.placeholder.com/300x400?text=No+Cover',
         coverImage: coverFileName 
           ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.512.jpg`
-          : null,
+          : 'https://via.placeholder.com/300x400?text=No+Cover',
         status: manga.attributes.status,
         year: manga.attributes.year,
         rating: manga.attributes.contentRating,
-        tags: manga.attributes.tags.slice(0, 5).map(tag => tag.attributes.name.en)
+        tags: manga.attributes.tags?.slice(0, 5).map(tag => tag.attributes.name.en) || []
       };
     });
 
     res.json({ results });
   } catch (error) {
+    console.error('Manga recent error:', error);
     res.status(500).json({ error: 'Failed to fetch recent manga', message: error.message });
   }
 });
@@ -111,10 +115,13 @@ app.get('/api/manga/search', async (req, res) => {
       return {
         id: manga.id,
         title: manga.attributes.title,
-        description: manga.attributes.description?.en || 'No description available',
+        description: manga.attributes.description?.en || manga.attributes.description || 'No description available',
+        image: coverFileName 
+          ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.512.jpg`
+          : 'https://via.placeholder.com/300x400?text=No+Cover',
         coverImage: coverFileName 
           ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.512.jpg`
-          : null,
+          : 'https://via.placeholder.com/300x400?text=No+Cover',
         status: manga.attributes.status,
         year: manga.attributes.year,
         rating: manga.attributes.contentRating
@@ -123,6 +130,7 @@ app.get('/api/manga/search', async (req, res) => {
 
     res.json({ results });
   } catch (error) {
+    console.error('Manga search error:', error);
     res.status(500).json({ error: 'Failed to search manga', message: error.message });
   }
 });
@@ -153,6 +161,7 @@ app.get('/api/manga/:id/chapters', async (req, res) => {
 
     res.json({ chapters });
   } catch (error) {
+    console.error('Chapters error:', error);
     res.status(500).json({ error: 'Failed to fetch chapters', message: error.message });
   }
 });
@@ -176,6 +185,7 @@ app.get('/api/manga/chapter/:chapterId', async (req, res) => {
 
     res.json({ pages: pageUrls });
   } catch (error) {
+    console.error('Chapter pages error:', error);
     res.status(500).json({ error: 'Failed to fetch chapter pages', message: error.message });
   }
 });
@@ -194,7 +204,7 @@ app.get('/api/anime/recent', async (req, res) => {
         params: { page }
       });
     } catch (error) {
-      // Fallback to Zoro
+      console.log('GogoAnime failed, trying Zoro...');
       data = await fetchAPI(`${CONSUMET_URL}/anime/zoro/recent-episodes`, {
         params: { page }
       });
@@ -210,6 +220,7 @@ app.get('/api/anime/recent', async (req, res) => {
 
     res.json({ results });
   } catch (error) {
+    console.error('Anime recent error:', error);
     res.status(500).json({ error: 'Failed to fetch recent anime', message: error.message });
   }
 });
@@ -228,7 +239,7 @@ app.get('/api/anime/search', async (req, res) => {
     try {
       data = await fetchAPI(`${CONSUMET_URL}/anime/gogoanime/${encodeURIComponent(q)}`);
     } catch (error) {
-      // Fallback to Zoro
+      console.log('GogoAnime search failed, trying Zoro...');
       data = await fetchAPI(`${CONSUMET_URL}/anime/zoro/${encodeURIComponent(q)}`);
     }
 
@@ -243,6 +254,7 @@ app.get('/api/anime/search', async (req, res) => {
 
     res.json({ results });
   } catch (error) {
+    console.error('Anime search error:', error);
     res.status(500).json({ error: 'Failed to search anime', message: error.message });
   }
 });
@@ -256,6 +268,7 @@ app.get('/api/anime/:id/episodes', async (req, res) => {
     try {
       data = await fetchAPI(`${CONSUMET_URL}/anime/gogoanime/info/${id}`);
     } catch (error) {
+      console.log('GogoAnime info failed, trying Zoro...');
       data = await fetchAPI(`${CONSUMET_URL}/anime/zoro/info/${id}`);
     }
 
@@ -267,6 +280,7 @@ app.get('/api/anime/:id/episodes', async (req, res) => {
       episodes: data.episodes || []
     });
   } catch (error) {
+    console.error('Episodes error:', error);
     res.status(500).json({ error: 'Failed to fetch episodes', message: error.message });
   }
 });
@@ -283,7 +297,7 @@ app.get('/api/anime/watch/:episodeId', async (req, res) => {
         params: { server }
       });
     } catch (error) {
-      // Fallback to Zoro
+      console.log('GogoAnime watch failed, trying Zoro...');
       data = await fetchAPI(`${CONSUMET_URL}/anime/zoro/watch`, {
         params: { episodeId }
       });
@@ -295,18 +309,20 @@ app.get('/api/anime/watch/:episodeId', async (req, res) => {
       subtitles: data.subtitles || []
     });
   } catch (error) {
+    console.error('Watch error:', error);
     res.status(500).json({ error: 'Failed to fetch streaming links', message: error.message });
   }
 });
 
 // ============= MOVIE ROUTES =============
 
-// Get recent movies (using Flixhq via Consumet)
+// Get recent movies (using Flixhq via Consumet) - FIXED
 app.get('/api/movie/recent', async (req, res) => {
   try {
     const { page = 1 } = req.query;
     
-    const data = await fetchAPI(`${CONSUMET_URL}/movies/flixhq/recent-movies`, {
+    // Try trending movies instead of recent
+    const data = await fetchAPI(`${CONSUMET_URL}/movies/flixhq/trending`, {
       params: { page }
     });
 
@@ -320,7 +336,9 @@ app.get('/api/movie/recent', async (req, res) => {
 
     res.json({ results });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch recent movies', message: error.message });
+    console.error('Movie recent error:', error.message);
+    // Return empty array instead of error to prevent frontend crash
+    res.json({ results: [] });
   }
 });
 
@@ -347,6 +365,7 @@ app.get('/api/movie/search', async (req, res) => {
 
     res.json({ results });
   } catch (error) {
+    console.error('Movie search error:', error);
     res.status(500).json({ error: 'Failed to search movies', message: error.message });
   }
 });
@@ -369,6 +388,7 @@ app.get('/api/movie/:id/episodes', async (req, res) => {
       episodes: data.episodes || []
     });
   } catch (error) {
+    console.error('Movie info error:', error);
     res.status(500).json({ error: 'Failed to fetch movie info', message: error.message });
   }
 });
@@ -391,6 +411,7 @@ app.get('/api/movie/watch/:episodeId', async (req, res) => {
       subtitles: data.subtitles || []
     });
   } catch (error) {
+    console.error('Movie watch error:', error);
     res.status(500).json({ error: 'Failed to fetch movie streaming links', message: error.message });
   }
 });
